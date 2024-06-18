@@ -55,6 +55,7 @@ class ModelProviderName(str, enum.Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GROQ = "groq"
+    OLLAMA = "ollama"
 
 
 class ChatMessage(BaseModel):
