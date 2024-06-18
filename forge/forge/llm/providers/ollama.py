@@ -48,6 +48,7 @@ OLLAMA_CHAT_MODELS = {
 
 class OllamaCredentials(ModelProviderCredentials):
     """Credentials for Ollama."""
+    api_key: SecretStr = UserConfigurable(from_env="OLLAMA_API_KEY")  # type: ignore
     api_base: Optional[SecretStr] = UserConfigurable(
         default=None, from_env="OLLAMA_API_BASE_URL"
     )
@@ -56,6 +57,7 @@ class OllamaCredentials(ModelProviderCredentials):
         return {
             k: v.get_secret_value()
             for k, v in {
+                "api_key": self.api_key,
                 "base_url": self.api_base,
             }.items()
             if v is not None
