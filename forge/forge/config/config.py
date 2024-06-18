@@ -13,6 +13,7 @@ import forge
 from forge.file_storage import FileStorageBackendName
 from forge.llm.providers import CHAT_MODELS, ModelName
 from forge.llm.providers.openai import OpenAICredentials, OpenAIModelName
+from forge.llm.providers.ollama import OllamaCredentials, OllamaModelName
 from forge.logging.config import LoggingConfig
 from forge.models.config import Configurable, SystemSettings, UserConfigurable
 from forge.speech.say import TTSConfig
@@ -267,6 +268,24 @@ async def assert_config_has_required_llm_api_keys(config: Config) -> None:
             )
             raise ValueError("Groq is unavailable: invalid API key") from e
 
+    if set((config.smart_llm, config.fast_llm)).intersection(OllamaModelName):
+        from forge.llm.providers.ollama import OllamaProvider
+
+        try:
+            ollama = OllamaProvider()
+            await ollama.get_available_models()
+        except ValidationError as e:
+            if "base_url" not in str(e):
+                raise
+
+            logger.error(
+                "Set your Ollama API base url in .env or as an environment variable"
+            )
+            logger.info(
+                "For further instructions: https://github.com/ollama/ollama"
+            )
+            raise ValueError("Ollama is unavailable: can't load")
+        
     if set((config.smart_llm, config.fast_llm)).intersection(OpenAIModelName):
         from openai import AuthenticationError
 

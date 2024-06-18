@@ -71,8 +71,8 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     MODELS = CHAT_MODELS
 
     default_settings = OllamaSettings(
-        name="groq_provider",
-        description="Provides access to Groq's API.",
+        name="ollama_provider",
+        description="Provides access to ollama API.",
         configuration=ModelProviderConfiguration(),
         credentials=None,
         budget=ModelProviderBudget(),
@@ -98,4 +98,4 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
 
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
-        return tiktoken.encoding_for_model("gpt-3.5-turbo")
+        return tiktoken.encoding_for_model("llama3-8b-ollama")

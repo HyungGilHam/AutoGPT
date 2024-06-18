@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from .anthropic import ANTHROPIC_CHAT_MODELS, AnthropicModelName, AnthropicProvider
 from .groq import GROQ_CHAT_MODELS, GroqModelName, GroqProvider
+from .ollama import OLLAMA_CHAT_MODELS, OllamaModelName, OllamaProvider
 from .openai import OPEN_AI_CHAT_MODELS, OpenAIModelName, OpenAIProvider
 from .schema import (
     AssistantChatMessage,
@@ -24,10 +25,10 @@ from .schema import (
 
 _T = TypeVar("_T")
 
-ModelName = AnthropicModelName | GroqModelName | OpenAIModelName
+ModelName = AnthropicModelName | GroqModelName | OpenAIModelName | OllamaModelName
 EmbeddingModelProvider = OpenAIProvider
 
-CHAT_MODELS = {**ANTHROPIC_CHAT_MODELS, **GROQ_CHAT_MODELS, **OPEN_AI_CHAT_MODELS}
+CHAT_MODELS = {**ANTHROPIC_CHAT_MODELS, **GROQ_CHAT_MODELS, **OPEN_AI_CHAT_MODELS, **OLLAMA_CHAT_MODELS}
 
 
 class MultiProvider(BaseChatModelProvider[ModelName, ModelProviderSettings]):
@@ -148,12 +149,13 @@ class MultiProvider(BaseChatModelProvider[ModelName, ModelProviderSettings]):
     @classmethod
     def _get_provider_class(
         cls, provider_name: ModelProviderName
-    ) -> type[AnthropicProvider | GroqProvider | OpenAIProvider]:
+    ) -> type[AnthropicProvider | GroqProvider | OpenAIProvider | OllamaProvider]:
         try:
             return {
                 ModelProviderName.ANTHROPIC: AnthropicProvider,
                 ModelProviderName.GROQ: GroqProvider,
                 ModelProviderName.OPENAI: OpenAIProvider,
+                ModelProviderName.OLLAMA: OllamaProvider,
             }[provider_name]
         except KeyError:
             raise ValueError(f"{provider_name} is not a known provider") from None
@@ -162,4 +164,4 @@ class MultiProvider(BaseChatModelProvider[ModelName, ModelProviderSettings]):
         return f"{self.__class__.__name__}()"
 
 
-ChatModelProvider = AnthropicProvider | GroqProvider | OpenAIProvider | MultiProvider
+ChatModelProvider = AnthropicProvider | GroqProvider | OpenAIProvider | MultiProvider | OllamaProvider
