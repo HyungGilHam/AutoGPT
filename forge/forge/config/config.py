@@ -269,13 +269,14 @@ async def assert_config_has_required_llm_api_keys(config: Config) -> None:
             raise ValueError("Groq is unavailable: invalid API key") from e
 
     if set((config.smart_llm, config.fast_llm)).intersection(OllamaModelName):
+
         from forge.llm.providers.ollama import OllamaProvider
 
         try:
             ollama = OllamaProvider()
             await ollama.get_available_models()
         except ValidationError as e:
-            if "base_url" not in str(e):
+            if "api_key" not in str(e):
                 raise
 
             logger.error(

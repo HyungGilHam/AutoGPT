@@ -20,6 +20,19 @@ from .schema import (
     ModelTokenizer,
 )
 
+from .schema import (
+    ChatModelInfo,
+    EmbeddingModelInfo,
+    ModelProviderService,
+    _ModelName,
+)
+
+from typing import (
+    Any,
+    Optional,
+    Sequence,
+)
+
 class OllamaModelName(str, enum.Enum):
     LLAMA3_8B = "llama3-8b-ollama"
     LLAMA3_70B = "llama3-70b-ollama"
@@ -92,12 +105,30 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     ):
         super(OllamaProvider, self).__init__(settings=settings, logger=logger)
 
-        from groq import AsyncGroq
-
-        self._client = AsyncGroq(
-            **self._credentials.get_api_access_kwargs()  # type: ignore
+    async def get_available_models(
+        self,
+    ) -> Sequence[ChatModelInfo[_ModelName] | EmbeddingModelInfo[_ModelName]]:
+        # 직접 입력하는 방식으로 수정된 메서드
+        _models = [
+             ChatModelInfo(
+            name=OllamaModelName.LLAMA3_8B,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.05 / 1e6,
+            completion_token_cost=0.10 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
+        ),
+        ChatModelInfo(
+            name=OllamaModelName.LLAMA3_70B,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.59 / 1e6,
+            completion_token_cost=0.79 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
         )
-
+        ]
+        return _models
+    
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
-        return tiktoken.encoding_for_model("llama3-8b-ollama")
+        return tiktoken.encoding_for_model("gpt-3.5-turbo")
