@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import enum
 import logging
 from typing import (
@@ -14,6 +15,9 @@ from typing import (
     TypeVar,
     cast,
 )
+from forge.json.parsing import extract_dict_from_json
+from forge.utils.exceptions import InvalidAgentResponseError
+from forge.models.utils import ModelWithSummary  # 추가된 부분
 
 import tiktoken
 from pydantic import SecretStr, BaseModel
@@ -60,6 +64,7 @@ from typing import (
     Optional,
     Sequence,
 )
+
 
 _T = TypeVar("_T")
 
@@ -137,25 +142,32 @@ class AsyncOllama:
     async def close(self):
         await self.client.aclose()
 
-class Thought(BaseModel):
-    observations: str
-    text: str
-    reasoning: str
-    self_criticism: str
-    plan: Optional[list[str]] = None
-    speak: Optional[str] = None
+from pydantic import Field
+class AssistantThoughts(ModelWithSummary):
+    observations: str = Field(
+        ..., description="Relevant observations from your last action (if any)"
+    )
+    text: str = Field(..., description="Thoughts")
+    reasoning: str = Field(..., description="Reasoning behind the thoughts")
+    self_criticism: str = Field(..., description="Constructive self-criticism")
+    plan: list[str] = Field(
+        ..., description="Short list that conveys the long-term plan"
+    )
+    speak: str = Field(..., description="Summary of thoughts, to say to user")
+
+    def summary(self) -> str:
+        return self.text
 
 class UseTool(BaseModel):
     name: str
     arguments: dict
 
-class OneShotAgentActionProposal(BaseModel):
-    thoughts: Thought
-    use_tool: UseTool
+class ActionProposal(BaseModel):
+    thoughts: str | ModelWithSummary
+    use_tool: AssistantFunctionCall
 
-class Episode(BaseModel):
-    action: OneShotAgentActionProposal
-    result: Optional[Any]
+class OneShotAgentActionProposal(ActionProposal):
+    thoughts: AssistantThoughts
     
 class OllamaSettings(ModelProviderSettings):
     credentials: Optional[OllamaCredentials]  # type: ignore
@@ -210,23 +222,64 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         print (f"Model: {model_name}")
 
         response_text = await self._client.chat.create(model=model_name, prompt=prompt)
-        print (f"Response: {response_text}")
+        print(f"Response 1: {response_text}")
+        response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
+        print(f"Response 2: {response_text}")
+
         assistant_message = AssistantChatMessage(content=response_text)
-        parsed_result: _T = None
 
         try:
-            parsed_result = OneShotAgentActionProposal.parse_raw(response_text)
+            assistant_reply_dict = extract_dict_from_json(assistant_message.content)
+            self._logger.debug(
+                "Parsing object extracted from LLM response:\n"
+                f"{json.dumps(assistant_reply_dict, indent=4)}"
+            )
+
+            # 필요한 필드가 없을 경우 기본값을 설정
+            if "thoughts" in assistant_reply_dict:
+                if "plan" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["plan"] = []
+                if "speak" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["speak"] = ""
+                if "self_criticism" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["self_criticism"] = ""
+                if "text" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["text"] = ""
+                if "reasoning" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["reasoning"] = ""
+                if "observations" not in assistant_reply_dict["thoughts"]:
+                    assistant_reply_dict["thoughts"]["observations"] = ""
+            else:
+                assistant_reply_dict["thoughts"] = {
+                    "observations": "",
+                    "text": "",
+                    "reasoning": "",
+                    "self_criticism": "",
+                    "plan": [],
+                    "speak": ""
+                }
+
+            # thoughts를 AssistantThoughts 인스턴스로 변환
+            parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
+            print("parsed_response", parsed_response)
         except Exception as e:
             self._logger.error(f"Error parsing response: {e}")
-            parsed_result = None
+            parsed_response = None
 
-        return ChatModelResponse(
+        response = ChatModelResponse(
             response=assistant_message,
-            parsed_result=parsed_result,
+            parsed_result=parsed_response,
             model_info=self.CHAT_MODELS[model_name],
             prompt_tokens_used=len(prompt),
-            completion_tokens_used=len(response_text)
+            completion_tokens_used=len(response_text),
+            completion_parser=completion_parser,
+            functions=functions,
+            max_output_tokens=max_output_tokens,
+            prefill_response=prefill_response,
+            **kwargs
         )
+        print("ChatModelResponse", response.parsed_result)
+        return response
     
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
