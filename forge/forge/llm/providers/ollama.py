@@ -205,8 +205,9 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     async def get_available_models(
         self,
     ) -> Sequence[ChatModelInfo[OllamaModelName]]:
-        return list(self.MODELS.values())
+        return list(self.MODELS.values())    
 
+    @retry(stop=stop_after_attempt(99), wait=wait_fixed(2), reraise=True)
     async def create_chat_completion(
         self,
         model_prompt: list[ChatMessage],
@@ -235,36 +236,12 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
                 f"{json.dumps(assistant_reply_dict, indent=4)}"
             )
 
-            # 필요한 필드가 없을 경우 기본값을 설정
-            if "thoughts" in assistant_reply_dict:
-                if "plan" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["plan"] = []
-                if "speak" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["speak"] = ""
-                if "self_criticism" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["self_criticism"] = ""
-                if "text" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["text"] = ""
-                if "reasoning" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["reasoning"] = ""
-                if "observations" not in assistant_reply_dict["thoughts"]:
-                    assistant_reply_dict["thoughts"]["observations"] = ""
-            else:
-                assistant_reply_dict["thoughts"] = {
-                    "observations": "",
-                    "text": "",
-                    "reasoning": "",
-                    "self_criticism": "",
-                    "plan": [],
-                    "speak": ""
-                }
-
             # thoughts를 AssistantThoughts 인스턴스로 변환
             parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
             print("parsed_response", parsed_response)
         except Exception as e:
-            self._logger.error(f"Error parsing response: {e}")
-            parsed_response = None
+            raise ValueError(f"Error parsing response: {e}")
+
 
         response = ChatModelResponse(
             response=assistant_message,
