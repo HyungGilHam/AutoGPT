@@ -111,16 +111,17 @@ class OllamaCredentials(ModelProviderCredentials):
             if v is not None
         }
 
+generate = False
 class AsyncOllamaChat:
     def __init__(self, client: httpx.AsyncClient, base_url: str):
         self.client = client
         self.base_url = base_url
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-    async def create(self, model: str, prompt: str) -> str:
+    async def generate(self, model: str, prompt: str) -> str:
         url = f"{self.base_url}/api/generate"
         headers = {"Content-Type": "application/json"}
-        data = {"model": model, "prompt": prompt}
+        data = {"model": model, "prompt": prompt, "format": "json"}
         response_text = ""
         async with self.client.stream("POST", url, headers=headers, json=data) as response:
             response.raise_for_status()
@@ -131,7 +132,37 @@ class AsyncOllamaChat:
                     if response_json.get("done", False):
                         break
         return response_text
-
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
+    async def create(self, model: str, prompt: list[ChatMessage]) -> str:
+        url = f"{self.base_url}/api/chat"
+        headers = {"Content-Type": "application/json"}
+        
+        # Convert the list of ChatMessage objects to a list of dictionaries
+        messages = [{"role": msg.role.value, "content": msg.content} for msg in prompt]
+        print(f"messages {messages}")
+        data = {
+            "model": model,
+            "messages": messages,
+            "stream": False
+        }
+        
+        try:
+            response = await self.client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            response_json = response.json()
+            print(f"response_json {response_json}")
+            
+            content = response_json.get('message', {}).get('content', '')
+            print(f"content {content}")
+            return content
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP 오류 발생: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            print(f"요청 오류 발생: {e}")
+            raise
+    
 class AsyncOllama:
     def __init__(self, api_key: str, base_url: str):
         self.api_key = api_key
@@ -173,6 +204,7 @@ class OllamaSettings(ModelProviderSettings):
     credentials: Optional[OllamaCredentials]  # type: ignore
     budget: ModelProviderBudget  # type: ignore
 
+global_prompt = ""
 class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     CHAT_MODELS = OLLAMA_CHAT_MODELS
     MODELS = CHAT_MODELS
@@ -207,7 +239,7 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     ) -> Sequence[ChatModelInfo[OllamaModelName]]:
         return list(self.MODELS.values())    
 
-    @retry(stop=stop_after_attempt(99), wait=wait_fixed(2), reraise=True)
+    @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
     async def create_chat_completion(
         self,
         model_prompt: list[ChatMessage],
@@ -218,14 +250,21 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         prefill_response: str = "",
         **kwargs,
     ) -> ChatModelResponse[_T]:
-        prompt = "\n".join([message.content for message in model_prompt])
-        print (f"Prompting: {prompt}")
-        print (f"Model: {model_name}")
-
-        response_text = await self._client.chat.create(model=model_name, prompt=prompt)
-        print(f"Response 1: {response_text}")
-        response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
-        print(f"Response 2: {response_text}")
+        global generate
+        print(f"Model_prompt: {model_prompt}")
+        
+        if generate is False:
+            prompt = "\n".join([message.content for message in model_prompt])
+            response_text = await self._client.chat.generate(model=model_name, prompt=prompt)
+            print(f"Response generate1: {response_text}")
+            response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
+            print(f"Response generate2: {response_text}")
+            generate = True
+        else:
+            response_text = await self._client.chat.create(model=model_name, prompt=model_prompt)
+            print(f"Response create1: {response_text}")
+            response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
+            print(f"Response create2: {response_text}")
 
         assistant_message = AssistantChatMessage(content=response_text)
 
