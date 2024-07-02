@@ -23,6 +23,7 @@ import tiktoken
 from pydantic import SecretStr, BaseModel
 import httpx
 from tenacity import retry, stop_after_attempt, wait_fixed
+from pydantic import ValidationError
 
 from forge.models.config import UserConfigurable
 
@@ -140,13 +141,12 @@ class AsyncOllamaChat:
         
         # Convert the list of ChatMessage objects to a list of dictionaries
         messages = [{"role": msg.role.value, "content": msg.content} for msg in prompt]
-        print(f"messages {messages}")
         data = {
             "model": model,
             "messages": messages,
             "stream": False
         }
-        
+        print(f"data {data}")
         try:
             response = await self.client.post(url, headers=headers, json=data)
             response.raise_for_status()
@@ -252,35 +252,53 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     ) -> ChatModelResponse[_T]:
         global generate
         print(f"Model_prompt: {model_prompt}")
-        
-        if generate is False:
-            prompt = "\n".join([message.content for message in model_prompt])
+        prompt = "\n".join([message.content for message in model_prompt])
+        print(f"message prompt: {prompt}")
+
+        for attempt in range(3):  # 최대 3번 시도
             response_text = await self._client.chat.generate(model=model_name, prompt=prompt)
-            print(f"Response generate1: {response_text}")
             response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
-            print(f"Response generate2: {response_text}")
-            generate = True
-        else:
-            response_text = await self._client.chat.create(model=model_name, prompt=model_prompt)
-            print(f"Response create1: {response_text}")
-            response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
-            print(f"Response create2: {response_text}")
+            print(f"Response generate: {response_text}")
+            assistant_message = AssistantChatMessage(content=response_text)
 
-        assistant_message = AssistantChatMessage(content=response_text)
+            try:
+                assistant_reply_dict = extract_dict_from_json(assistant_message.content)
+                self._logger.debug(
+                    "Parsing object extracted from LLM response:\n"
+                    f"{json.dumps(assistant_reply_dict, indent=4)}"
+                )
 
-        try:
-            assistant_reply_dict = extract_dict_from_json(assistant_message.content)
-            self._logger.debug(
-                "Parsing object extracted from LLM response:\n"
-                f"{json.dumps(assistant_reply_dict, indent=4)}"
-            )
+                # thoughts를 AssistantThoughts 인스턴스로 변환
+                parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
+                print("parsed_response", parsed_response)
 
-            # thoughts를 AssistantThoughts 인스턴스로 변환
-            parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
-            print("parsed_response", parsed_response)
-        except Exception as e:
-            raise ValueError(f"Error parsing response: {e}")
-
+                # 포맷이 올바르면 루프를 빠져나옴
+                break
+            except (json.JSONDecodeError, ValidationError) as e:
+                if attempt < 2:  # 마지막 시도가 아니면 재요청
+                    print(f"Error parsing response: {e}. Requesting correct format...")
+                    format_request = (
+                        "The response format is incorrect. Please provide the response "
+                        "in the following JSON format:\n"
+                        "{\n"
+                        "  \"thoughts\": {\n"
+                        "    \"observations\": string,\n"
+                        "    \"text\": string,\n"
+                        "    \"reasoning\": string,\n"
+                        "    \"self_criticism\": string,\n"
+                        "    \"plan\": Array<string>,\n"
+                        "    \"speak\": string\n"
+                        "  },\n"
+                        "  \"use_tool\": {\n"
+                        "    \"name\": string,\n"
+                        "    \"arguments\": Record<string, any>\n"
+                        "  }\n"
+                        "}\n"
+                        "Please reformat your response accordingly."
+                    )
+                    model_prompt.append(AssistantChatMessage(content=format_request))
+                else:
+                    raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
 
         response = ChatModelResponse(
             response=assistant_message,
