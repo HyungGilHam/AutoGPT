@@ -3,7 +3,6 @@ import logging
 
 from forge.config.ai_directives import AIDirectives
 from forge.config.ai_profile import AIProfile
-from forge.config.config import Config
 from forge.llm.prompting import ChatPrompt, LanguageModelClassification, PromptStrategy
 from forge.llm.providers import MultiProvider
 from forge.llm.providers.schema import (
@@ -13,6 +12,8 @@ from forge.llm.providers.schema import (
 )
 from forge.models.config import SystemConfiguration, UserConfigurable
 from forge.models.json_schema import JSONSchema
+
+from autogpt.app.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class AgentProfileGeneratorConfiguration(SystemConfiguration):
                     required=True,
                 ),
             },
-        ).dict()
+        ).model_dump()
     )
 
 
@@ -155,7 +156,7 @@ class AgentProfileGenerator(PromptStrategy):
         self._model_classification = model_classification
         self._system_prompt_message = system_prompt
         self._user_prompt_template = user_prompt_template
-        self._create_agent_function = CompletionModelFunction.parse_obj(
+        self._create_agent_function = CompletionModelFunction.model_validate(
             create_agent_function
         )
 
@@ -212,7 +213,7 @@ class AgentProfileGenerator(PromptStrategy):
 
 async def generate_agent_profile_for_task(
     task: str,
-    app_config: Config,
+    app_config: AppConfig,
     llm_provider: MultiProvider,
 ) -> tuple[AIProfile, AIDirectives]:
     """Generates an AIConfig object from the given string.
@@ -221,7 +222,7 @@ async def generate_agent_profile_for_task(
     AIConfig: The AIConfig object tailored to the user's input
     """
     agent_profile_generator = AgentProfileGenerator(
-        **AgentProfileGenerator.default_configuration.dict()  # HACK
+        **AgentProfileGenerator.default_configuration.model_dump()  # HACK
     )
 
     prompt = agent_profile_generator.build_prompt(task)
