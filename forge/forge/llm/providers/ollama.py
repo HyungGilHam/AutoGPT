@@ -17,7 +17,6 @@ from typing import (
 )
 from forge.json.parsing import extract_dict_from_json
 from forge.utils.exceptions import InvalidAgentResponseError
-from forge.models.utils import ModelWithSummary  # 추가된 부분
 
 import tiktoken
 from pydantic import SecretStr, BaseModel
@@ -28,29 +27,15 @@ from pydantic import ValidationError
 from forge.models.config import UserConfigurable
 
 from ._openai_base import BaseOpenAIChatProvider
-from .schema import (
-    AssistantChatMessage,
-    AssistantFunctionCall,
-    AssistantToolCall,
-    BaseChatModelProvider,
-    BaseEmbeddingModelProvider,
-    BaseModelProvider,
-    ChatMessage,
-    ChatModelInfo,
-    ChatModelResponse,
-    CompletionModelFunction,
-    Embedding,
-    EmbeddingModelInfo,
-    EmbeddingModelResponse,
-    ModelProviderService,
-    _ModelName,
-    _ModelProviderSettings,
-)
+
+from typing import TYPE_CHECKING
 
 from .schema import (
+    AssistantChatMessage,
+    ChatMessage,
+    ChatModelResponse,
+    CompletionModelFunction,
     ChatModelInfo,
-    EmbeddingModelInfo,
-    ModelProviderService,
     ModelProviderBudget,
     ModelProviderConfiguration,
     ModelProviderName,
@@ -135,7 +120,7 @@ class AsyncOllamaChat:
         return response_text
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
-    async def create(self, model: str, prompt: list[ChatMessage]) -> str:
+    async def chat(self, model: str, prompt: list[ChatMessage]) -> str:
         url = f"{self.base_url}/api/chat"
         headers = {"Content-Type": "application/json"}
         
@@ -173,33 +158,31 @@ class AsyncOllama:
     async def close(self):
         await self.client.aclose()
 
-from pydantic import Field
-class AssistantThoughts(ModelWithSummary):
-    observations: str = Field(
-        ..., description="Relevant observations from your last action (if any)"
-    )
-    text: str = Field(..., description="Thoughts")
-    reasoning: str = Field(..., description="Reasoning behind the thoughts")
-    self_criticism: str = Field(..., description="Constructive self-criticism")
-    plan: list[str] = Field(
-        ..., description="Short list that conveys the long-term plan"
-    )
-    speak: str = Field(..., description="Summary of thoughts, to say to user")
+# from pydantic import Field
+# class AssistantThoughts(ModelWithSummary):
+#     observations: str = Field(
+#         description="Relevant observations from your last action (if any)"
+#     )
+#     text: str = Field(description="Thoughts")
+#     reasoning: str = Field(description="Reasoning behind the thoughts")
+#     self_criticism: str = Field(description="Constructive self-criticism")
+#     plan: list[str] = Field(description="Short list that conveys the long-term plan")
+#     speak: str = Field(description="Summary of thoughts, to say to user")
 
-    def summary(self) -> str:
-        return self.text
+#     def summary(self) -> str:
+#         return self.text
 
-class UseTool(BaseModel):
-    name: str
-    arguments: dict
+# class UseTool(BaseModel):
+#     name: str
+#     arguments: dict
 
-class ActionProposal(BaseModel):
-    thoughts: str | ModelWithSummary
-    use_tool: AssistantFunctionCall
+# class ActionProposal(BaseModel):
+#     thoughts: str | ModelWithSummary
+#     use_tool: AssistantFunctionCall
 
-class OneShotAgentActionProposal(ActionProposal):
-    thoughts: AssistantThoughts
-    
+# class OneShotAgentActionProposal(ActionProposal):
+#     thoughts: AssistantThoughts
+
 class OllamaSettings(ModelProviderSettings):
     credentials: Optional[OllamaCredentials]  # type: ignore
     budget: ModelProviderBudget  # type: ignore
@@ -250,6 +233,8 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         prefill_response: str = "",
         **kwargs,
     ) -> ChatModelResponse[_T]:
+        from autogpt.agents.prompt_strategies.one_shot import OneShotAgentActionProposal, OneShotAgentPromptStrategy
+
         global generate
         print(f"Model_prompt: {model_prompt}")
         prompt = "\n".join([message.content for message in model_prompt])
