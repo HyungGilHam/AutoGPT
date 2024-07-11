@@ -14,6 +14,7 @@ from typing import (
     Sequence,
     TypeVar,
     cast,
+    Iterator,
 )
 from forge.json.parsing import extract_dict_from_json
 from forge.utils.exceptions import InvalidAgentResponseError
@@ -27,11 +28,17 @@ from pydantic import ValidationError
 from forge.models.config import UserConfigurable
 
 from ._openai_base import BaseOpenAIChatProvider
-
+from forge.json.parsing import json_loads
 from typing import TYPE_CHECKING
 
+from openai.types.chat import (
+    ChatCompletionMessage,
+)
+
 from .schema import (
+    AssistantToolCall,
     AssistantChatMessage,
+    AssistantFunctionCall,
     ChatMessage,
     ChatModelResponse,
     CompletionModelFunction,
@@ -42,6 +49,7 @@ from .schema import (
     ModelProviderCredentials,
     ModelProviderSettings,
     ModelTokenizer,
+    AssistantToolCallDict,
     _ModelName,
 )
 
@@ -53,10 +61,11 @@ from typing import (
 
 
 _T = TypeVar("_T")
-
+    
 class OllamaModelName(str, enum.Enum):
     LLAMA3_8B = "llama3"
     LLAMA3_70B = "llama3"
+    GEMMA2 = "gemma2"
 
 OLLAMA_CHAT_MODELS = {
     info.name: info
@@ -71,6 +80,14 @@ OLLAMA_CHAT_MODELS = {
         ),
         ChatModelInfo(
             name=OllamaModelName.LLAMA3_70B,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.59 / 1e6,
+            completion_token_cost=0.79 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
+        ),
+        ChatModelInfo(
+            name=OllamaModelName.GEMMA2,
             provider_name=ModelProviderName.OLLAMA,
             prompt_token_cost=0.59 / 1e6,
             completion_token_cost=0.79 / 1e6,
@@ -158,36 +175,10 @@ class AsyncOllama:
     async def close(self):
         await self.client.aclose()
 
-# from pydantic import Field
-# class AssistantThoughts(ModelWithSummary):
-#     observations: str = Field(
-#         description="Relevant observations from your last action (if any)"
-#     )
-#     text: str = Field(description="Thoughts")
-#     reasoning: str = Field(description="Reasoning behind the thoughts")
-#     self_criticism: str = Field(description="Constructive self-criticism")
-#     plan: list[str] = Field(description="Short list that conveys the long-term plan")
-#     speak: str = Field(description="Summary of thoughts, to say to user")
-
-#     def summary(self) -> str:
-#         return self.text
-
-# class UseTool(BaseModel):
-#     name: str
-#     arguments: dict
-
-# class ActionProposal(BaseModel):
-#     thoughts: str | ModelWithSummary
-#     use_tool: AssistantFunctionCall
-
-# class OneShotAgentActionProposal(ActionProposal):
-#     thoughts: AssistantThoughts
-
 class OllamaSettings(ModelProviderSettings):
     credentials: Optional[OllamaCredentials]  # type: ignore
     budget: ModelProviderBudget  # type: ignore
 
-global_prompt = ""
 class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
     CHAT_MODELS = OLLAMA_CHAT_MODELS
     MODELS = CHAT_MODELS
@@ -244,6 +235,9 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
             response_text = await self._client.chat.generate(model=model_name, prompt=prompt)
             response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
             print(f"Response generate: {response_text}")
+            # tool_calls, _errors = self._parse_assistant_tool_calls(
+            #     response_text
+            # )
             assistant_message = AssistantChatMessage(content=response_text)
 
             try:
@@ -285,9 +279,11 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
                 else:
                     raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
 
+        parsed_result = completion_parser(assistant_message)
+
         response = ChatModelResponse(
             response=assistant_message,
-            parsed_result=parsed_response,
+            parsed_result=parsed_result,
             model_info=self.CHAT_MODELS[model_name],
             prompt_tokens_used=len(prompt),
             completion_tokens_used=len(response_text),
@@ -299,7 +295,7 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         )
         print("ChatModelResponse", response.parsed_result)
         return response
-    
+
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
         return tiktoken.encoding_for_model("gpt-3.5-turbo")
