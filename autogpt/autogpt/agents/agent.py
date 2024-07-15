@@ -30,7 +30,7 @@ from forge.components.image_gen import ImageGeneratorComponent
 from forge.components.system import SystemComponent
 from forge.components.user_interaction import UserInteractionComponent
 from forge.components.watchdog import WatchdogComponent
-from forge.components.web import WebSearchComponent, WebSeleniumComponent
+from forge.components.web import WebSearchComponent, WebSeleniumComponent, WebSeleniumConfiguration
 from forge.file_storage.base import FileStorage
 from forge.llm.prompting.schema import ChatPrompt
 from forge.llm.prompting.utils import dump_prompt
@@ -98,7 +98,6 @@ class Agent(BaseAgent[OneShotAgentActionProposal], Configurable[AgentSettings]):
         app_config: AppConfig,
     ):
         super().__init__(settings)
-
         self.llm_provider = llm_provider
         prompt_config = OneShotAgentPromptStrategy.default_configuration.model_copy(
             deep=True
@@ -140,6 +139,9 @@ class Agent(BaseAgent[OneShotAgentActionProposal], Configurable[AgentSettings]):
         self.web_selenium = WebSeleniumComponent(
             llm_provider,
             app_config.app_data_dir,
+            config=WebSeleniumConfiguration(
+                model_name=self.llm.name
+            )
         )
         self.context = ContextComponent(self.file_manager.workspace, settings.context)
         self.watchdog = WatchdogComponent(settings.config, settings.history).run_after(
@@ -148,7 +150,7 @@ class Agent(BaseAgent[OneShotAgentActionProposal], Configurable[AgentSettings]):
 
         self.event_history = settings.history
         self.app_config = app_config
-
+        
     async def propose_action(self) -> OneShotAgentActionProposal:
         """Proposes the next action to execute, based on the task and current state.
 

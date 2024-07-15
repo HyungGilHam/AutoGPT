@@ -5,22 +5,15 @@ import enum
 import logging
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    ClassVar,
-    Mapping,
     Optional,
-    ParamSpec,
     Sequence,
     TypeVar,
-    cast,
-    Iterator,
 )
 from forge.json.parsing import extract_dict_from_json
-from forge.utils.exceptions import InvalidAgentResponseError
 
 import tiktoken
-from pydantic import SecretStr, BaseModel
+from pydantic import SecretStr
 import httpx
 from tenacity import retry, stop_after_attempt, wait_fixed
 from pydantic import ValidationError
@@ -31,14 +24,8 @@ from ._openai_base import BaseOpenAIChatProvider
 from forge.json.parsing import json_loads
 from typing import TYPE_CHECKING
 
-from openai.types.chat import (
-    ChatCompletionMessage,
-)
-
 from .schema import (
-    AssistantToolCall,
     AssistantChatMessage,
-    AssistantFunctionCall,
     ChatMessage,
     ChatModelResponse,
     CompletionModelFunction,
@@ -49,8 +36,6 @@ from .schema import (
     ModelProviderCredentials,
     ModelProviderSettings,
     ModelTokenizer,
-    AssistantToolCallDict,
-    _ModelName,
 )
 
 from typing import (
@@ -148,7 +133,7 @@ class AsyncOllamaChat:
             "messages": messages,
             "stream": False
         }
-        print(f"data {data}")
+        # print(f"data {data}")
         try:
             response = await self.client.post(url, headers=headers, json=data)
             response.raise_for_status()
@@ -227,14 +212,15 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         from autogpt.agents.prompt_strategies.one_shot import OneShotAgentActionProposal, OneShotAgentPromptStrategy
 
         global generate
-        print(f"Model_prompt: {model_prompt}")
+        # print(f"model_name: {model_name}")
+        # print(f"Model_prompt: {model_prompt}")
         prompt = "\n".join([message.content for message in model_prompt])
-        print(f"message prompt: {prompt}")
+        # print(f"message prompt: {prompt}")
 
-        for attempt in range(3):  # 최대 3번 시도
+        for attempt in range(2):  # 최대 3번 시도
             response_text = await self._client.chat.generate(model=model_name, prompt=prompt)
             response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
-            print(f"Response generate: {response_text}")
+            # print(f"Response generate: {response_text}")
             # tool_calls, _errors = self._parse_assistant_tool_calls(
             #     response_text
             # )
@@ -249,7 +235,7 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
 
                 # thoughts를 AssistantThoughts 인스턴스로 변환
                 parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
-                print("parsed_response", parsed_response)
+                # print("parsed_response", parsed_response)
 
                 # 포맷이 올바르면 루프를 빠져나옴
                 break
@@ -257,24 +243,38 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
                 if attempt < 2:  # 마지막 시도가 아니면 재요청
                     print(f"Error parsing response: {e}. Requesting correct format...")
                     format_request = (
+                        
                         "The response format is incorrect. Please provide the response "
                         "in the following JSON format:\n"
+                        "## RESPONSE FORMAT"
+                        "YOU MUST ALWAYS RESPOND WITH A JSON OBJECT OF THE FOLLOWING TYPE:"
                         "{\n"
-                        "  \"thoughts\": {\n"
-                        "    \"observations\": string,\n"
-                        "    \"text\": string,\n"
-                        "    \"reasoning\": string,\n"
-                        "    \"self_criticism\": string,\n"
-                        "    \"plan\": Array<string>,\n"
-                        "    \"speak\": string\n"
+                        "  \"thoughts\": { \n"
+                        "    \"observations\": string, // Relevant observations from your last action (if any) \n"
+                        "    \"text\": string, // Thoughts \n "
+                        "    \"reasoning\": string, // Reasoning behind the thoughts \n"
+                        "    \"self_criticism\": string, // Constructive self-criticism \n"
+                        "    \"plan\": Array<string>, // Short list that conveys the long-term plan \n"
+                        "    \"speak\": string // Summary of thoughts, to say to user\n"
                         "  },\n"
                         "  \"use_tool\": {\n"
-                        "    \"name\": string,\n"
+                        "    \"name\": string, // open_file,open_folder,finish,read_file,write_file,list_folder,ask_user,web_search,google,read_webpage \n"
                         "    \"arguments\": Record<string, any>\n"
                         "  }\n"
                         "}\n"
                         "Please reformat your response accordingly."
                     )
+
+#                     1. open_file: Opens a file for editing or continued viewing; creates it if it does not exist yet. Note: If you only need to read or write a file once, use `write_to_file` instead.. Params: (file_path: string)
+# 2. open_folder: Open a folder to keep track of its content. Params: (path: string)
+# 3. finish: Use this to shut down once you have completed your task, or when there are insurmountable problems that make it impossible for you to finish your task.. Params: (reason: string)
+# 4. read_file: Read a file and return the contents. Params: (filename: string)
+# 5. write_file: Write a file, creating it if necessary. If the file exists, it is overwritten.. Params: (filename: string, contents: string)
+# 6. list_folder: Lists files in a folder recursively. Params: (folder: string)
+# 7. ask_user: If you need more details or information regarding the given goals, you can ask the user for input.. Params: (question: string)
+# 8. web_search: Searches the web. Params: (query: string, num_results?: number)
+# 9. google: Google Search. Params: (query: string, num_results?: number)
+# 10. read_webpage: Read a webpage, and extract specific information from it. You must specify either topics_of_interest, a question, or get_raw_content.. Params: (url: string, topics_of_interest?: Array<string>, que
                     model_prompt.append(AssistantChatMessage(content=format_request))
                 else:
                     raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
@@ -293,9 +293,10 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
             prefill_response=prefill_response,
             **kwargs
         )
-        print("ChatModelResponse", response.parsed_result)
+        # print("ChatModelResponse", response.parsed_result)
         return response
 
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
         return tiktoken.encoding_for_model("gpt-3.5-turbo")
+    
