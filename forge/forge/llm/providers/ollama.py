@@ -51,6 +51,9 @@ class OllamaModelName(str, enum.Enum):
     LLAMA3_8B = "llama3"
     LLAMA3_70B = "llama3"
     GEMMA2 = "gemma2"
+    PHI3_MINI = "phi3:mini"
+    PHI3_MEDIUM = "phi3:medium"
+    PHI3_MEDIUM_128K = "phi3:medium-128k"
 
 OLLAMA_CHAT_MODELS = {
     info.name: info
@@ -73,6 +76,30 @@ OLLAMA_CHAT_MODELS = {
         ),
         ChatModelInfo(
             name=OllamaModelName.GEMMA2,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.59 / 1e6,
+            completion_token_cost=0.79 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
+        ),
+        ChatModelInfo(
+            name=OllamaModelName.PHI3_MINI,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.59 / 1e6,
+            completion_token_cost=0.79 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
+        ),
+        ChatModelInfo(
+            name=OllamaModelName.PHI3_MEDIUM,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.59 / 1e6,
+            completion_token_cost=0.79 / 1e6,
+            max_tokens=8192,
+            has_function_call_api=True,
+        ),
+        ChatModelInfo(
+            name=OllamaModelName.PHI3_MEDIUM_128K,
             provider_name=ModelProviderName.OLLAMA,
             prompt_token_cost=0.59 / 1e6,
             completion_token_cost=0.79 / 1e6,
@@ -263,18 +290,9 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
                         "  }\n"
                         "}\n"
                         "Please reformat your response accordingly."
+                        "## Commands\nThese are the ONLY commands you can use. Any action you perform must be possible through one of these commands:\n1. open_file: Opens a file for editing or continued viewing; creates it if it does not exist yet. Note: If you only need to read or write a file once, use `write_to_file` instead.. Params: (file_path: string)\n2. open_folder: Open a folder to keep track of its content. Params: (path: string)\n3. finish: Use this to shut down once you have completed your task, or when there are insurmountable problems that make it impossible for you to finish your task.. Params: (reason: string)\n4. read_file: Read a file and return the contents. Params: (filename: string)\n5. write_file: Write a file, creating it if necessary. If the file exists, it is overwritten.. Params: (filename: string, contents: string)\n6. list_folder: Lists files in a folder recursively. Params: (folder: string)\n7. ask_user: If you need more details or information regarding the given goals, you can ask the user for input.. Params: (question: string)\n8. web_search: Searches the web. Params: (query: string, num_results?: number)\n9. google: Google Search. Params: (query: string, num_results?: number)\n10. read_webpage: Read a webpage, and extract specific information from it. You must specify either topics_of_interest, a question, or get_raw_content.. Params: (url: string, topics_of_interest?: Array<string>, question?: string, get_raw_content?: boolean)"
                     )
 
-#                     1. open_file: Opens a file for editing or continued viewing; creates it if it does not exist yet. Note: If you only need to read or write a file once, use `write_to_file` instead.. Params: (file_path: string)
-# 2. open_folder: Open a folder to keep track of its content. Params: (path: string)
-# 3. finish: Use this to shut down once you have completed your task, or when there are insurmountable problems that make it impossible for you to finish your task.. Params: (reason: string)
-# 4. read_file: Read a file and return the contents. Params: (filename: string)
-# 5. write_file: Write a file, creating it if necessary. If the file exists, it is overwritten.. Params: (filename: string, contents: string)
-# 6. list_folder: Lists files in a folder recursively. Params: (folder: string)
-# 7. ask_user: If you need more details or information regarding the given goals, you can ask the user for input.. Params: (question: string)
-# 8. web_search: Searches the web. Params: (query: string, num_results?: number)
-# 9. google: Google Search. Params: (query: string, num_results?: number)
-# 10. read_webpage: Read a webpage, and extract specific information from it. You must specify either topics_of_interest, a question, or get_raw_content.. Params: (url: string, topics_of_interest?: Array<string>, que
                     model_prompt.append(AssistantChatMessage(content=format_request))
                 else:
                     raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
