@@ -186,7 +186,7 @@ class AsyncOllamaChat:
 
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-    async def generate(self, **kwargs) -> str:
+    async def generate(self, **kwargs) -> ChatCompletionMessage:
         url = f"{self.base_url}/api/generate"
         headers = {"Content-Type": "application/json"}
 
@@ -215,6 +215,31 @@ class AsyncOllamaChat:
                 function_call=None,  # type: ignore
                 tool_call=None # type: ignore
             )
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+    async def generatePro(self, model, messages_array) -> str:
+        url = f"{self.base_url}/api/generate"
+        headers = {"Content-Type": "application/json"}
+        prompt= ""
+        for msg in messages_array:
+            role = msg.role
+            role_value = role.value if hasattr(role, 'value') else str(role)
+            prompt += f'---------------{role_value}-----------------\n'
+            prompt += f'{msg.content}\n'
+
+        data = {"model": model, "prompt": prompt, "format": "json"}
+        response_text = ""
+        async with self.client.stream("POST", url, headers=headers, json=data) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line:
+                    response_json = httpx.Response(200, content=line).json()
+                    response_text += response_json["response"]
+                    if response_json.get("done", False):
+                        break
+        
+        print("response_text", response_text)
+        return response_text
     
     def extract_json(text):
         # Find all occurrences of JSON-like structures
@@ -353,159 +378,160 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
 
     _ModelName = TypeVar("_ModelName", bound=str)
 
-    @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
-    async def _create_chat_completion(
-        self,
-        model: _ModelName,
-        completion_kwargs: CompletionCreateParams,
-    ) -> tuple[ChatCompletion, float, int, int]:
-        """
-        Create a chat completion using an OpenAI-like API with retry handling
-
-        Params:
-            model: The model to use for the completion
-            completion_kwargs: All other arguments for the completion call
-
-        Returns:
-            ChatCompletion: The chat completion response object
-            float: The cost ($) of this completion
-            int: Number of prompt tokens used
-            int: Number of completion tokens used
-        """
-        completion_kwargs["model"] = completion_kwargs.get("model") or model
-
-        print("completion_kwargs", completion_kwargs)
-        @self._retry_api_request
-        async def _create_chat_completion_with_retry() -> ChatCompletion:
-            return await self._client.chat.chat(
-                **completion_kwargs
-            )
-
-        completion = await _create_chat_completion_with_retry()
-
-        if completion.usage:
-            prompt_tokens_used = completion.usage.prompt_tokens
-            completion_tokens_used = completion.usage.completion_tokens
-        else:
-            prompt_tokens_used = completion_tokens_used = 0
-
-        if self._budget:
-            cost = self._budget.update_usage_and_cost(
-                model_info=self.CHAT_MODELS[model],
-                input_tokens_used=prompt_tokens_used,
-                output_tokens_used=completion_tokens_used,
-            )
-        else:
-            cost = 0
-
-        self._logger.debug(
-            f"{model} completion usage: {prompt_tokens_used} input, "
-            f"{completion_tokens_used} output - ${round(cost, 5)}"
-        )
-        return completion, cost, prompt_tokens_used, completion_tokens_used
-    
     # @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
-    # async def create_chat_completion(
+    # async def _create_chat_completion(
     #     self,
-    #     model_prompt: list[ChatMessage],
-    #     model_name: OllamaModelName,
-    #     completion_parser: Callable[[AssistantChatMessage], _T] = lambda _: None,
-    #     functions: Optional[list[CompletionModelFunction]] = None,
-    #     max_output_tokens: Optional[int] = None,
-    #     prefill_response: str = "",
-    #     **kwargs,
-    # ) -> ChatModelResponse[_T]:
-    #     from autogpt.agents.prompt_strategies.one_shot import OneShotAgentActionProposal, OneShotAgentPromptStrategy
+    #     model: _ModelName,
+    #     completion_kwargs: CompletionCreateParams,
+    # ) -> tuple[ChatCompletion, float, int, int]:
+    #     """
+    #     Create a chat completion using an OpenAI-like API with retry handling
 
-    #     (
-    #         openai_messages,
-    #         completion_kwargs,
-    #         parse_kwargs,
-    #     ) = self._get_chat_completion_args(
-    #         prompt_messages=model_prompt,
-    #         model=model_name,
-    #         functions=functions,
-    #         max_output_tokens=max_output_tokens,
-    #         **kwargs,
+    #     Params:
+    #         model: The model to use for the completion
+    #         completion_kwargs: All other arguments for the completion call
+
+    #     Returns:
+    #         ChatCompletion: The chat completion response object
+    #         float: The cost ($) of this completion
+    #         int: Number of prompt tokens used
+    #         int: Number of completion tokens used
+    #     """
+    #     completion_kwargs["model"] = completion_kwargs.get("model") or model
+
+    #     print("completion_kwargs", completion_kwargs)
+    #     @self._retry_api_request
+    #     async def _create_chat_completion_with_retry() -> ChatCompletion:
+    #         return await self._client.chat.generate(
+    #             **completion_kwargs
+    #         )
+
+    #     completion = await _create_chat_completion_with_retry()
+
+    #     if completion.usage:
+    #         prompt_tokens_used = completion.usage.prompt_tokens
+    #         completion_tokens_used = completion.usage.completion_tokens
+    #     else:
+    #         prompt_tokens_used = completion_tokens_used = 0
+
+    #     if self._budget:
+    #         cost = self._budget.update_usage_and_cost(
+    #             model_info=self.CHAT_MODELS[model],
+    #             input_tokens_used=prompt_tokens_used,
+    #             output_tokens_used=completion_tokens_used,
+    #         )
+    #     else:
+    #         cost = 0
+
+    #     self._logger.debug(
+    #         f"{model} completion usage: {prompt_tokens_used} input, "
+    #         f"{completion_tokens_used} output - ${round(cost, 5)}"
     #     )
+    #     return completion, cost, prompt_tokens_used, completion_tokens_used
+    
+    @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
+    async def create_chat_completion(
+        self,
+        model_prompt: list[ChatMessage],
+        model_name: OllamaModelName,
+        completion_parser: Callable[[AssistantChatMessage], _T] = lambda _: None,
+        functions: Optional[list[CompletionModelFunction]] = None,
+        max_output_tokens: Optional[int] = None,
+        prefill_response: str = "",
+        **kwargs,
+    ) -> ChatModelResponse[_T]:
+        from autogpt.agents.prompt_strategies.one_shot import OneShotAgentActionProposal, OneShotAgentPromptStrategy
 
-    #     print("ollama create_chat_completion",openai_messages)
-    #     print("ollama  completion_kwargs", completion_kwargs)
-    #     print("ollama  parse_kwargs", parse_kwargs)
+        (
+            openai_messages,
+            completion_kwargs,
+            parse_kwargs,
+        ) = self._get_chat_completion_args(
+            prompt_messages=model_prompt,
+            model=model_name,
+            functions=functions,
+            max_output_tokens=max_output_tokens,
+            **kwargs,
+        )
 
-    #     print(f"model_name: {model_name}")
-    #     print(f"Model_prompt: {model_prompt}")
-    #     prompt = "\n".join([message.content for message in model_prompt])
-    #     print(f"message prompt: {prompt}")
+        print("ollama create_chat_completion",openai_messages)
+        print("ollama  completion_kwargs", completion_kwargs)
+        print("ollama  parse_kwargs", parse_kwargs)
 
-    #     for attempt in range(2):  # 최대 3번 시도
-    #         response_text = await self._client.chat.generate(model=model_name, prompt=prompt)
-    #         response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
-    #         print(f"Response generate: {response_text}")
-    #         # tool_calls, _errors = self._parse_assistant_tool_calls(
-    #         #     response_text
-    #         # )
-    #         assistant_message = AssistantChatMessage(content=response_text)
+        print(f"model_name: {model_name}")
+        print(f"Model_prompt: {model_prompt}")
+        # prompt = "\n".join([message.content for message in model_prompt])
+        # print(f"message prompt: {prompt}")
+        # print(f"message kwargs: {kwargs}")
 
-    #         try:
-    #             assistant_reply_dict = extract_dict_from_json(assistant_message.content)
-    #             self._logger.debug(
-    #                 "Parsing object extracted from LLM response:\n"
-    #                 f"{json.dumps(assistant_reply_dict, indent=4)}"
-    #             )
+        for attempt in range(2):  # 최대 3번 시도
+            response_text = await self._client.chat.generatePro(model=model_name, messages_array=model_prompt)
+            response_text = response_text.replace("Here is my response:", "").replace("```json", "").replace("```", "").strip()
+            print(f"Response generate: {response_text}")
+            # tool_calls, _errors = self._parse_assistant_tool_calls(
+            #     response_text
+            # )
+            assistant_message = AssistantChatMessage(content=response_text)
 
-    #             # thoughts를 AssistantThoughts 인스턴스로 변환
-    #             parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
-    #             print("parsed_response", parsed_response)
+            try:
+                assistant_reply_dict = extract_dict_from_json(assistant_message.content)
+                self._logger.debug(
+                    "Parsing object extracted from LLM response:\n"
+                    f"{json.dumps(assistant_reply_dict, indent=4)}"
+                )
 
-    #             # 포맷이 올바르면 루프를 빠져나옴
-    #             break
-    #         except (json.JSONDecodeError, ValidationError) as e:
-    #             if attempt < 2:  # 마지막 시도가 아니면 재요청
-    #                 print(f"Error parsing response: {e}. Requesting correct format...")
-    #                 format_request = (
+                # thoughts를 AssistantThoughts 인스턴스로 변환
+                parsed_response = OneShotAgentActionProposal.parse_obj(assistant_reply_dict)
+                print("parsed_response", parsed_response)
+
+                # 포맷이 올바르면 루프를 빠져나옴
+                break
+            except (json.JSONDecodeError, ValidationError) as e:
+                if attempt < 2:  # 마지막 시도가 아니면 재요청
+                    print(f"Error parsing response: {e}. Requesting correct format...")
+                    format_request = (
                         
-    #                     "The response format is incorrect. Please provide the response "
-    #                     "in the following JSON format:\n"
-    #                     "## RESPONSE FORMAT"
-    #                     "YOU MUST ALWAYS RESPOND WITH A JSON OBJECT OF THE FOLLOWING TYPE:"
-    #                     "{\n"
-    #                     "  \"thoughts\": { \n"
-    #                     "    \"observations\": string, // Relevant observations from your last action (if any) \n"
-    #                     "    \"text\": string, // Thoughts \n "
-    #                     "    \"reasoning\": string, // Reasoning behind the thoughts \n"
-    #                     "    \"self_criticism\": string, // Constructive self-criticism \n"
-    #                     "    \"plan\": Array<string>, // Short list that conveys the long-term plan \n"
-    #                     "    \"speak\": string // Summary of thoughts, to say to user\n"
-    #                     "  },\n"
-    #                     "  \"use_tool\": {\n"
-    #                     "    \"name\": string, // open_file,open_folder,finish,read_file,write_file,list_folder,ask_user,web_search,google,read_webpage \n"
-    #                     "    \"arguments\": Record<string, any>\n"
-    #                     "  }\n"
-    #                     "}\n"
-    #                     "Please reformat your response accordingly."
-    #                 )
+                        "The response format is incorrect. Please provide the response "
+                        "in the following JSON format:\n"
+                        "## RESPONSE FORMAT"
+                        "YOU MUST ALWAYS RESPOND WITH A JSON OBJECT OF THE FOLLOWING TYPE:"
+                        "{\n"
+                        "  \"thoughts\": { \n"
+                        "    \"observations\": string, // Relevant observations from your last action (if any) \n"
+                        "    \"text\": string, // Thoughts \n "
+                        "    \"reasoning\": string, // Reasoning behind the thoughts \n"
+                        "    \"self_criticism\": string, // Constructive self-criticism \n"
+                        "    \"plan\": Array<string>, // Short list that conveys the long-term plan \n"
+                        "    \"speak\": string // Summary of thoughts, to say to user\n"
+                        "  },\n"
+                        "  \"use_tool\": {\n"
+                        "    \"name\": string, // open_file,open_folder,finish,read_file,write_file,list_folder,ask_user,web_search,google,read_webpage \n"
+                        "    \"arguments\": Record<string, any>\n"
+                        "  }\n"
+                        "}\n"
+                        "Please reformat your response accordingly."
+                    )
 
-    #                 model_prompt.append(AssistantChatMessage(content=format_request))
-    #             else:
-    #                 raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
+                    model_prompt.append(AssistantChatMessage(content=format_request))
+                else:
+                    raise ValueError(f"Failed to get correct format after 3 attempts: {e}")
 
-    #     parsed_result = completion_parser(assistant_message)
+        parsed_result = completion_parser(assistant_message)
 
-    #     response = ChatModelResponse(
-    #         response=assistant_message,
-    #         parsed_result=parsed_result,
-    #         model_info=self.CHAT_MODELS[model_name],
-    #         prompt_tokens_used=len(prompt),
-    #         completion_tokens_used=len(response_text),
-    #         completion_parser=completion_parser,
-    #         functions=functions,
-    #         max_output_tokens=max_output_tokens,
-    #         prefill_response=prefill_response,
-    #         **kwargs
-    #     )
-    #     # print("ChatModelResponse", response.parsed_result)
-    #     return response
+        response = ChatModelResponse(
+            response=assistant_message,
+            parsed_result=parsed_result,
+            model_info=self.CHAT_MODELS[model_name],
+            prompt_tokens_used=len(model_prompt),
+            completion_tokens_used=len(response_text),
+            completion_parser=completion_parser,
+            functions=functions,
+            max_output_tokens=max_output_tokens,
+            prefill_response=prefill_response,
+            **kwargs
+        )
+        # print("ChatModelResponse", response.parsed_result)
+        return response
 
     def get_tokenizer(self, model_name: OllamaModelName) -> ModelTokenizer[Any]:
         # HACK: No official tokenizer is available for Groq
