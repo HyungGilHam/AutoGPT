@@ -56,7 +56,7 @@ class ModelProviderName(str, enum.Enum):
     ANTHROPIC = "anthropic"
     GROQ = "groq"
     OLLAMA = "ollama"
-
+    LLAMAFILE = "llamafile"
 
 class ChatMessage(BaseModel):
     class Role(str, enum.Enum):
@@ -187,7 +187,7 @@ class ModelResponse(BaseModel):
 
     prompt_tokens_used: int
     completion_tokens_used: int
-    model_info: ModelInfo
+    llm_info: ModelInfo
 
 
 class ModelProviderConfiguration(SystemConfiguration):

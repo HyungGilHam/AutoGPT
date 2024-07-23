@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Any, Dict, Generic, Set, Tuple, Type, TypeVar
+
 from pydantic import BaseModel, Field, PrivateAttr
 from pydantic_settings import (
     BaseSettings,
@@ -57,12 +58,12 @@ class Config(UpdateTrackingModel["Config"], BaseSettings):
 
     @classmethod
     def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
         return (JsonConfigSettingsSource(settings_cls),)
 
@@ -70,7 +71,22 @@ class Config(UpdateTrackingModel["Config"], BaseSettings):
 class Secrets(UpdateTrackingModel["Secrets"], BaseSettings):
     """Secrets for the server."""
 
-    database_password: str = ""
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+    groq_api_key: str = Field(default="", description="Groq API key")
+
+    reddit_client_id: str = Field(default="", description="Reddit client ID")
+    reddit_client_secret: str = Field(default="", description="Reddit client secret")
+    reddit_username: str = Field(default="", description="Reddit username")
+    reddit_password: str = Field(default="", description="Reddit password")
+
+    openweathermap_api_key: str = Field(
+        default="", description="OpenWeatherMap API key"
+    )
+
+    medium_api_key: str = Field(default="", description="Medium API key")
+    medium_author_id: str = Field(default="", description="Medium author ID")
+
     # Add more secret fields as needed
 
     model_config = SettingsConfigDict(
@@ -87,7 +103,7 @@ class Settings(BaseModel):
 
     def save(self) -> None:
         # Save updated config to JSON file
-        if self.config._updated_fields:
+        if self.config.updated_fields:
             config_to_save = self.config.get_updates()
             config_path = os.path.join(get_data_path(), "config.json")
             if os.path.exists(config_path):
