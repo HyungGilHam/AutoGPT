@@ -7,11 +7,8 @@ from pydantic import ValidationError
 
 from .anthropic import ANTHROPIC_CHAT_MODELS, AnthropicModelName, AnthropicProvider
 from .groq import GROQ_CHAT_MODELS, GroqModelName, GroqProvider
-<<<<<<< HEAD
 from .ollama import OLLAMA_CHAT_MODELS, OllamaModelName, OllamaProvider
-=======
 from .llamafile import LLAMAFILE_CHAT_MODELS, LlamafileModelName, LlamafileProvider
->>>>>>> master
 from .openai import OPEN_AI_CHAT_MODELS, OpenAIModelName, OpenAIProvider
 from .schema import (
     AssistantChatMessage,

@@ -128,20 +128,21 @@ class LlamafileProvider(
     _configuration: LlamafileConfiguration
 
     async def get_available_models(self) -> Sequence[ChatModelInfo[LlamafileModelName]]:
-        _models = (await self._client.models.list()).data
-        # note: at the moment, llamafile only serves one model at a time (so this
-        # list will only ever have one value). however, in the future, llamafile
-        # may support multiple models, so leaving this method as-is for now.
-        self._logger.debug(f"Retrieved llamafile models: {_models}")
+       return list(self.MODELS.values())   
+        # _models = (await self._client.models.list()).data
+        # # note: at the moment, llamafile only serves one model at a time (so this
+        # # list will only ever have one value). however, in the future, llamafile
+        # # may support multiple models, so leaving this method as-is for now.
+        # self._logger.debug(f"Retrieved llamafile models: {_models}")
 
-        clean_model_ids = [clean_model_name(m.id) for m in _models]
-        self._logger.debug(f"Cleaned llamafile model IDs: {clean_model_ids}")
+        # clean_model_ids = [clean_model_name(m.id) for m in _models]
+        # self._logger.debug(f"Cleaned llamafile model IDs: {clean_model_ids}")
 
-        return [
-            LLAMAFILE_CHAT_MODELS[id]
-            for id in clean_model_ids
-            if id in LLAMAFILE_CHAT_MODELS
-        ]
+        # return [
+        #     LLAMAFILE_CHAT_MODELS[id]
+        #     for id in clean_model_ids
+        #     if id in LLAMAFILE_CHAT_MODELS
+        # ]
 
     def get_tokenizer(self, model_name: LlamafileModelName) -> LlamafileTokenizer:
         return LlamafileTokenizer(self._credentials)

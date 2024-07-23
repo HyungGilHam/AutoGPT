@@ -58,6 +58,7 @@ from typing import (
 _T = TypeVar("_T")
     
 class OllamaModelName(str, enum.Enum):
+    LLAMA3_1_8B = "llama3.1"
     LLAMA3_8B = "llama3"
     LLAMA3_70B = "llama3"
     GEMMA2 = "gemma2"
@@ -68,6 +69,14 @@ class OllamaModelName(str, enum.Enum):
 OLLAMA_CHAT_MODELS = {
     info.name: info
     for info in [
+        ChatModelInfo(
+            name=OllamaModelName.LLAMA3_1_8B,
+            provider_name=ModelProviderName.OLLAMA,
+            prompt_token_cost=0.05 / 1e6,
+            completion_token_cost=0.10 / 1e6,
+            max_tokens=128000,
+            has_function_call_api=True,
+        ),
         ChatModelInfo(
             name=OllamaModelName.LLAMA3_8B,
             provider_name=ModelProviderName.OLLAMA,
@@ -97,7 +106,7 @@ OLLAMA_CHAT_MODELS = {
             provider_name=ModelProviderName.OLLAMA,
             prompt_token_cost=0.59 / 1e6,
             completion_token_cost=0.79 / 1e6,
-            max_tokens=8192,
+            max_tokens=128000,
             has_function_call_api=True,
         ),
         ChatModelInfo(
@@ -105,7 +114,7 @@ OLLAMA_CHAT_MODELS = {
             provider_name=ModelProviderName.OLLAMA,
             prompt_token_cost=0.59 / 1e6,
             completion_token_cost=0.79 / 1e6,
-            max_tokens=8192,
+            max_tokens=128000,
             has_function_call_api=True,
         ),
         ChatModelInfo(
@@ -113,7 +122,7 @@ OLLAMA_CHAT_MODELS = {
             provider_name=ModelProviderName.OLLAMA,
             prompt_token_cost=0.59 / 1e6,
             completion_token_cost=0.79 / 1e6,
-            max_tokens=8192,
+            max_tokens=128000,
             has_function_call_api=True,
         ),
     ]
@@ -521,7 +530,7 @@ class OllamaProvider(BaseOpenAIChatProvider[OllamaModelName, OllamaSettings]):
         response = ChatModelResponse(
             response=assistant_message,
             parsed_result=parsed_result,
-            model_info=self.CHAT_MODELS[model_name],
+            llm_info=self.CHAT_MODELS[model_name],
             prompt_tokens_used=len(model_prompt),
             completion_tokens_used=len(response_text),
             completion_parser=completion_parser,
