@@ -2,12 +2,10 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import ReactFlow, {
   addEdge,
-  applyNodeChanges,
-  applyEdgeChanges,
+  useNodesState,
+  useEdgesState,
   Node,
   Edge,
-  OnNodesChange,
-  OnEdgesChange,
   OnConnect,
   NodeTypes,
   Connection,
@@ -17,7 +15,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import CustomNode from './CustomNode';
 import './flow.css';
-import AutoGPTServerAPI, { Block, Graph, ObjectSchema } from '@/lib/autogpt-server-api';
+import AutoGPTServerAPI, { Block, Graph, NodeExecutionResult, ObjectSchema } from '@/lib/autogpt-server-api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ChevronRight, ChevronLeft } from "lucide-react";
@@ -76,8 +74,8 @@ const FlowEditor: React.FC<{
   template?: boolean;
   className?: string;
 }> = ({ flowID, template, className }) => {
-  const [nodes, setNodes] = useState<Node<CustomNodeData>[]>([]);
-  const [edges, setEdges] = useState<Edge<CustomEdgeData>[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdgeData>([]);
   const [nodeId, setNodeId] = useState<number>(1);
   const [availableNodes, setAvailableNodes] = useState<Block[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -123,16 +121,6 @@ const FlowEditor: React.FC<{
 
   const nodeTypes: NodeTypes = useMemo(() => ({ custom: CustomNode }), []);
   const edgeTypes: EdgeTypes = useMemo(() => ({ custom: CustomEdge }), []);
-
-  const onNodesChange: OnNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
-  );
-
-  const onEdgesChange: OnEdgesChange = useCallback(
-    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
-  );
 
   const getOutputType = (id: string, handleId: string) => {
     const node = nodes.find((node) => node.id === id);
@@ -251,7 +239,7 @@ const FlowEditor: React.FC<{
 
     setNodes(graph.nodes.map(node => {
       const block = availableNodes.find(block => block.id === node.block_id)!;
-      const newNode = {
+      const newNode: Node<CustomNodeData> = {
         id: node.id,
         type: 'custom',
         position: { x: node.metadata.position.x, y: node.metadata.position.y },
@@ -268,7 +256,14 @@ const FlowEditor: React.FC<{
               : node
             ));
           },
-          connections: [],
+          connections: graph.links
+            .filter(l => [l.source_id, l.sink_id].includes(node.id))
+            .map(link => ({
+              source: link.source_id,
+              sourceHandle: link.source_name,
+              target: link.sink_id,
+              targetHandle: link.sink_name,
+            })),
           isOutputOpen: false,
         },
       };
@@ -445,7 +440,7 @@ const FlowEditor: React.FC<{
 
 
 
-  const updateNodesWithExecutionData = (executionData: any[]) => {
+  const updateNodesWithExecutionData = (executionData: NodeExecutionResult[]) => {
     setNodes((nds) =>
       nds.map((node) => {
         const nodeExecution = executionData.find((exec) => exec.node_id === node.data.backend_id);
