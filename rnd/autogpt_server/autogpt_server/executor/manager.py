@@ -81,19 +81,19 @@ def execute_node(
     # Sanity check: validate the execution input.
     prefix = get_log_prefix(graph_exec_id, node_exec_id, node_block.name)
     exec_data, error = validate_exec(node, data.data, resolve_input=False)
-    if not exec_data:
+    if exec_data is None:
         logger.error(f"{prefix} Skip execution, input validation error: {error}")
         return
 
     # Execute the node
-    logger.warning(f"{prefix} execute with input:\n`{exec_data}`")
+    exec_data_str = str(exec_data).encode("utf-8").decode("unicode_escape")
+    logger.warning(f"{prefix} execute with input:\n`{exec_data_str}`")
     update_execution(ExecutionStatus.RUNNING)
 
     try:
         for output_name, output_data in node_block.execute(exec_data):
             logger.warning(f"{prefix} Executed, output [{output_name}]:`{output_data}`")
             wait(upsert_execution_output(node_exec_id, output_name, output_data))
-            update_execution(ExecutionStatus.COMPLETED)
 
             for execution in _enqueue_next_nodes(
                 api_client=api_client,
@@ -104,6 +104,9 @@ def execute_node(
                 prefix=prefix,
             ):
                 yield execution
+
+        update_execution(ExecutionStatus.COMPLETED)
+
     except Exception as e:
         error_msg = f"{e.__class__.__name__}: {e}"
         logger.exception(f"{prefix} failed with error. `%s`", error_msg)
@@ -437,7 +440,7 @@ class ExecutionManager(AppService):
                 input_data = {}
 
             input_data, error = validate_exec(node, input_data)
-            if not input_data:
+            if input_data is None:
                 raise Exception(error)
             else:
                 nodes_input.append((node.id, input_data))

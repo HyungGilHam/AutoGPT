@@ -1,8 +1,15 @@
 /* Mirror of autogpt_server/data/block.py:Block */
+
+export type Category = {
+  category: string;
+  description: string;
+};
+
 export type Block = {
   id: string;
   name: string;
   description: string;
+  categories: Category[];
   inputSchema: BlockIORootSchema;
   outputSchema: BlockIORootSchema;
 };
@@ -110,6 +117,7 @@ export type Link = {
   sink_id: string;
   source_name: string;
   sink_name: string;
+  is_static: boolean;
 };
 
 export type LinkCreatable = Omit<Link, "id"> & {

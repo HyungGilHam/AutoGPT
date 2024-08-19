@@ -42,7 +42,7 @@ const NodeHandle: FC<HandleProps> = ({
 
   const dot = (
     <div
-      className={`w-4 h-4 m-1 border-2 bg-white ${isConnected ? getTypeBgColor(schema.type || "any") : "border-gray-600"} rounded-full transition-colors duration-100 group-hover:bg-gray-300`}
+      className={`w-4 h-4 m-1 border-2 bg-white ${isConnected ? getTypeBgColor(schema.type || "any") : "border-gray-300"} rounded-full transition-colors duration-100 group-hover:bg-gray-300`}
     />
   );
 
@@ -60,7 +60,7 @@ const NodeHandle: FC<HandleProps> = ({
             {label}
           </div>
         </Handle>
-        <SchemaTooltip schema={schema} />
+        <SchemaTooltip description={schema.description} />
       </div>
     );
   } else {
