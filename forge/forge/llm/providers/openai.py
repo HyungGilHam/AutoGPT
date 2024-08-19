@@ -76,6 +76,7 @@ class OpenAIModelName(str, enum.Enum):
     GPT4 = GPT4_ROLLING
     GPT4_32k = GPT4_ROLLING_32k
     GPT4_O = GPT4_O_ROLLING
+    GPT4_O_MINI = "gpt-4o-mini"
 
 
 OPEN_AI_EMBEDDING_MODELS = {
@@ -173,6 +174,14 @@ OPEN_AI_CHAT_MODELS = {
             max_tokens=128_000,
             has_function_call_api=True,
         ),
+        ChatModelInfo(
+            name=OpenAIModelName.GPT4_O_MINI,
+            provider_name=ModelProviderName.OPENAI,
+            prompt_token_cost=5 / 1_000_000,
+            completion_token_cost=15 / 1_000_000,
+            max_tokens=128_000,
+            has_function_call_api=True,
+        ),
     ]
 }
 # Copy entries for models with equivalent specs
@@ -194,6 +203,7 @@ chat_model_mapping = {
         OpenAIModelName.GPT4_v5,
     ],
     OpenAIModelName.GPT4_O: [OpenAIModelName.GPT4_O_v1],
+    OpenAIModelName.GPT4_O_MINI: [OpenAIModelName.GPT4_O_MINI],
 }
 for base, copies in chat_model_mapping.items():
     for copy in copies:
